@@ -1,0 +1,27 @@
+{
+  "schemaVersion": 1,
+  "id": "voicecaptions",
+  "version": "${version}",
+  "name": "Voice Captions",
+  "description": "Speech-to-text captions above players' heads for Plasmo Voice, recognized by a local Whisper server (NPU, GPU or CPU).",
+  "authors": ["LTS_Server"],
+  "license": "MIT",
+  "environment": "client",
+  "entrypoints": {
+    "client": ["org.lts.voicecaptions.VoiceCaptionsClient"],
+    "modmenu": ["org.lts.voicecaptions.compat.VoiceCaptionsModMenu"]
+  },
+  "depends": {
+    "fabricloader": ">=0.19.3",
+    "minecraft": "~26.3",
+    "java": ">=25",
+    "plasmovoice": ">=2.1.17",
+    "fabric-key-mapping-api-v1": "*",
+    "fabric-lifecycle-events-v1": "*",
+    "fabric-rendering-v1": "*",
+    "fabric-command-api-v2": "*"
+  },
+  "suggests": {
+    "modmenu": "*"
+  }
+}
