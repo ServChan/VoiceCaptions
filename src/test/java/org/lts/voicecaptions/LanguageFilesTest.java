@@ -42,12 +42,27 @@ class LanguageFilesTest {
                     if (key.equals("voicecaptions.json")) {
                         continue;
                     }
+                    if (key.endsWith(".")) {
+                        String prefix = key;
+                        assertTrue(keys.stream().anyMatch(candidate -> candidate.startsWith(prefix)),
+                                file.getFileName() + " uses missing key prefix " + key);
+                        continue;
+                    }
                     assertTrue(keys.contains(key), file.getFileName() + " uses missing key " + key);
-                    if (key.startsWith("voicecaptions.option.")) {
+                    if (key.startsWith("voicecaptions.option.") && !key.endsWith(".tooltip")) {
                         assertTrue(keys.contains(key + ".tooltip"), "missing tooltip for " + key);
                     }
                 }
             }
+        }
+    }
+
+    @Test
+    void everyGpuModelHasALabel() throws IOException {
+        Set<String> keys = read(LANG.resolve("en_us.json")).keySet();
+        for (org.lts.voicecaptions.engine.EngineCatalog.Model model
+                : org.lts.voicecaptions.engine.EngineCatalog.Model.values()) {
+            assertTrue(keys.contains(model.translationKey()), model.translationKey());
         }
     }
 

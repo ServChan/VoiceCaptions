@@ -22,7 +22,7 @@ import su.plo.voice.proto.data.audio.source.PlayerSourceInfo;
 import su.plo.voice.proto.data.audio.source.SourceInfo;
 import su.plo.voice.proto.data.player.VoicePlayerInfo;
 
-@Addon(id = "voicecaptions", name = "Voice Captions", scope = AddonLoaderScope.CLIENT, version = "1.0.0",
+@Addon(id = "voicecaptions", name = "Voice Captions", scope = AddonLoaderScope.CLIENT, version = "1.1.0",
         authors = {"LTS_Server"})
 public final class VoiceCaptionsAddon implements AddonInitializer {
     private static final int DEFAULT_SAMPLE_RATE = 48_000;

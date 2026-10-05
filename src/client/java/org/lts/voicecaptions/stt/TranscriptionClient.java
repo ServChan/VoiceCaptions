@@ -15,14 +15,23 @@ import java.time.Duration;
 import java.util.concurrent.LinkedBlockingDeque;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
-import org.lts.voicecaptions.VoiceCaptionsClient;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.lts.voicecaptions.audio.Resampler;
 import org.lts.voicecaptions.audio.WavEncoder;
+import org.lts.voicecaptions.engine.EngineRouter;
 
 public final class TranscriptionClient {
+    private static final Logger LOGGER = LoggerFactory.getLogger("voicecaptions");
     private static final long UNAVAILABLE_BACKOFF_MS = 10_000L;
 
-    public record Request(String endpoint, String model, String language, int timeoutSeconds) {
+    public record Request(String language, int timeoutSeconds) {
+    }
+
+    public interface Router {
+        EngineRouter.Route route() throws EngineRouter.RouteException;
+
+        void unreachable(EngineRouter.Route route);
     }
 
     public enum FailureKind {
@@ -31,13 +40,16 @@ public final class TranscriptionClient {
         HTTP_ERROR,
         BAD_RESPONSE,
         BAD_ENDPOINT,
+        NOT_INSTALLED,
+        UNSUPPORTED,
+        ENGINE_FAILED,
         DROPPED
     }
 
     public sealed interface Result permits Success, Failure {
     }
 
-    public record Success(String text, long latencyMs) implements Result {
+    public record Success(String text, long latencyMs, EngineRouter.Backend backend, String model) implements Result {
     }
 
     public record Failure(FailureKind kind, String detail) implements Result {
@@ -50,13 +62,16 @@ public final class TranscriptionClient {
             .connectTimeout(Duration.ofSeconds(3))
             .version(HttpClient.Version.HTTP_1_1)
             .build();
+    private final Router router;
     private final LinkedBlockingDeque<Job> queue = new LinkedBlockingDeque<>();
     private final Thread worker;
     private volatile int maxQueue = 6;
     private volatile long unavailableUntilMs;
     private volatile boolean running = true;
+    private EngineRouter.Backend lastAttemptBackend;
 
-    public TranscriptionClient() {
+    public TranscriptionClient(Router router) {
+        this.router = router;
         worker = new Thread(this::run, "VoiceCaptions STT");
         worker.setDaemon(true);
         worker.start();
@@ -85,6 +100,11 @@ public final class TranscriptionClient {
         queue.offerFirst(new Job(new short[Resampler.TARGET_RATE], request, callback));
     }
 
+    public void warmUp() {
+        queue.offerFirst(new Job(new short[Resampler.TARGET_RATE], new Request("", 60), ignored -> {
+        }));
+    }
+
     public void shutdown() {
         running = false;
         worker.interrupt();
@@ -106,34 +126,55 @@ public final class TranscriptionClient {
             try {
                 result = execute(job);
             } catch (RuntimeException exception) {
-                VoiceCaptionsClient.LOGGER.warn("Transcription failed", exception);
+                LOGGER.warn("Transcription failed", exception);
                 result = new Failure(FailureKind.BAD_RESPONSE, exception.getClass().getSimpleName());
             }
             try {
                 job.callback().accept(result);
             } catch (RuntimeException exception) {
-                VoiceCaptionsClient.LOGGER.warn("Transcription callback failed", exception);
+                LOGGER.warn("Transcription callback failed", exception);
             }
         }
     }
 
     private Result execute(Job job) {
+        lastAttemptBackend = null;
+        Result result = attempt(job);
+        if (result instanceof Failure failure && failure.kind() == FailureKind.UNAVAILABLE
+                && lastAttemptBackend == EngineRouter.Backend.NPU) {
+            return attempt(job);
+        }
+        return result;
+    }
+
+    private Result attempt(Job job) {
         if (System.currentTimeMillis() < unavailableUntilMs) {
             return new Failure(FailureKind.UNAVAILABLE, "backoff");
         }
         Request request = job.request();
+        EngineRouter.Route route;
+        try {
+            route = router.route();
+            lastAttemptBackend = route.backend();
+        } catch (EngineRouter.RouteException exception) {
+            return switch (exception.problem()) {
+                case NOT_INSTALLED -> new Failure(FailureKind.NOT_INSTALLED, exception.getMessage());
+                case UNSUPPORTED -> new Failure(FailureKind.UNSUPPORTED, exception.getMessage());
+                case ENGINE_FAILED -> new Failure(FailureKind.ENGINE_FAILED, exception.getMessage());
+            };
+        }
         URI uri;
         try {
-            uri = URI.create(request.endpoint().strip());
+            uri = URI.create(route.endpoint().strip());
             if (uri.getScheme() == null || uri.getHost() == null) {
-                return new Failure(FailureKind.BAD_ENDPOINT, request.endpoint());
+                return new Failure(FailureKind.BAD_ENDPOINT, route.endpoint());
             }
         } catch (IllegalArgumentException exception) {
-            return new Failure(FailureKind.BAD_ENDPOINT, request.endpoint());
+            return new Failure(FailureKind.BAD_ENDPOINT, route.endpoint());
         }
         MultipartBody body = new MultipartBody()
                 .file("file", "speech.wav", "audio/wav", WavEncoder.encodeMono16(job.samples(), Resampler.TARGET_RATE))
-                .field("model", request.model())
+                .field("model", route.model())
                 .field("language", request.language())
                 .field("response_format", "json");
         HttpRequest httpRequest = HttpRequest.newBuilder(uri)
@@ -148,11 +189,9 @@ public final class TranscriptionClient {
         } catch (HttpTimeoutException exception) {
             return new Failure(FailureKind.TIMEOUT, Integer.toString(request.timeoutSeconds()));
         } catch (ConnectException exception) {
-            unavailableUntilMs = System.currentTimeMillis() + UNAVAILABLE_BACKOFF_MS;
-            return new Failure(FailureKind.UNAVAILABLE, uri.getHost() + ":" + uri.getPort());
+            return unreachable(route, uri.getHost() + ":" + uri.getPort());
         } catch (IOException exception) {
-            unavailableUntilMs = System.currentTimeMillis() + UNAVAILABLE_BACKOFF_MS;
-            return new Failure(FailureKind.UNAVAILABLE, exception.getClass().getSimpleName());
+            return unreachable(route, exception.getClass().getSimpleName());
         } catch (InterruptedException exception) {
             Thread.currentThread().interrupt();
             return new Failure(FailureKind.DROPPED, "interrupted");
@@ -165,7 +204,15 @@ public final class TranscriptionClient {
         if (text == null) {
             return new Failure(FailureKind.BAD_RESPONSE, abbreviate(response.body()));
         }
-        return new Success(text, latencyMs);
+        return new Success(text, latencyMs, route.backend(), route.model());
+    }
+
+    private Failure unreachable(EngineRouter.Route route, String detail) {
+        router.unreachable(route);
+        if (route.backend() == EngineRouter.Backend.CUSTOM) {
+            unavailableUntilMs = System.currentTimeMillis() + UNAVAILABLE_BACKOFF_MS;
+        }
+        return new Failure(FailureKind.UNAVAILABLE, route.endpoint());
     }
 
     static String extractText(String body) {

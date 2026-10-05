@@ -13,17 +13,22 @@ import java.nio.file.StandardCopyOption;
 import java.util.Locale;
 import java.util.regex.Pattern;
 import net.fabricmc.loader.api.FabricLoader;
+import org.lts.voicecaptions.engine.EngineCatalog;
 
 public final class VoiceCaptionsConfig {
-    public static final String DEFAULT_ENDPOINT = "http://127.0.0.1:52625/v1/audio/transcriptions";
-    public static final String DEFAULT_MODEL = "whisper-v3:turbo";
-    private static final int CURRENT_CONFIG_VERSION = 1;
+    public static final String DEFAULT_ENDPOINT = EngineCatalog.NPU_ENDPOINT;
+    public static final String DEFAULT_MODEL = EngineCatalog.NPU_MODEL;
+    public static final String ENGINE_AUTO = "auto";
+    public static final String ENGINE_CUSTOM = "custom";
+    private static final int CURRENT_CONFIG_VERSION = 2;
     private static final Pattern LANGUAGE = Pattern.compile("[a-z]{0,3}");
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
     private static volatile VoiceCaptionsConfig current = defaults();
 
     public int configVersion = CURRENT_CONFIG_VERSION;
     public boolean enabled = true;
+    public String engineMode = ENGINE_AUTO;
+    public String gpuModel = EngineCatalog.Model.TURBO.id();
     public String endpoint = DEFAULT_ENDPOINT;
     public String model = DEFAULT_MODEL;
     public String language = "ru";
@@ -49,7 +54,15 @@ public final class VoiceCaptionsConfig {
         Path configPath = configPath();
         VoiceCaptionsConfig primary = read(configPath);
         if (primary != null) {
+            boolean migrated = primary.configVersion < CURRENT_CONFIG_VERSION;
             current = sanitize(primary);
+            if (migrated) {
+                try {
+                    writeAtomically(configPath, current, true);
+                } catch (IOException exception) {
+                    VoiceCaptionsClient.LOGGER.error("Could not persist migrated config {}", configPath, exception);
+                }
+            }
             return;
         }
         VoiceCaptionsConfig backup = read(backupPath(configPath));
@@ -80,6 +93,10 @@ public final class VoiceCaptionsConfig {
             VoiceCaptionsClient.LOGGER.error("Could not save config {}", configPath, exception);
             return false;
         }
+    }
+
+    public boolean isAutoEngine() {
+        return !ENGINE_CUSTOM.equals(engineMode);
     }
 
     public static boolean isValidLanguage(String value) {
@@ -123,7 +140,15 @@ public final class VoiceCaptionsConfig {
     }
 
     static VoiceCaptionsConfig sanitize(VoiceCaptionsConfig config) {
+        if (config.configVersion < 2) {
+            boolean defaultServer = (config.endpoint == null || config.endpoint.isBlank()
+                    || DEFAULT_ENDPOINT.equals(config.endpoint.strip()))
+                    && (config.model == null || DEFAULT_MODEL.equals(config.model.strip()));
+            config.engineMode = defaultServer ? ENGINE_AUTO : ENGINE_CUSTOM;
+        }
         config.configVersion = CURRENT_CONFIG_VERSION;
+        config.engineMode = ENGINE_CUSTOM.equals(config.engineMode) ? ENGINE_CUSTOM : ENGINE_AUTO;
+        config.gpuModel = EngineCatalog.Model.byId(config.gpuModel).id();
         config.endpoint = config.endpoint == null || config.endpoint.isBlank() ? DEFAULT_ENDPOINT : config.endpoint.strip();
         config.model = config.model == null ? DEFAULT_MODEL : config.model.strip();
         config.language = isValidLanguage(config.language) ? config.language.strip().toLowerCase(Locale.ROOT) : "";

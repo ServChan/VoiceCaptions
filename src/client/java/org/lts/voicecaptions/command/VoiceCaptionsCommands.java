@@ -13,6 +13,7 @@ import net.minecraft.network.chat.MutableComponent;
 import org.lts.voicecaptions.VoiceCaptionsClient;
 import org.lts.voicecaptions.VoiceCaptionsConfig;
 import org.lts.voicecaptions.VoiceCaptionsManager;
+import org.lts.voicecaptions.engine.EngineCatalog;
 import org.lts.voicecaptions.gui.VoiceCaptionsConfigScreen;
 import org.lts.voicecaptions.stt.TranscriptionClient;
 
@@ -36,6 +37,14 @@ public final class VoiceCaptionsCommands {
             check(context.getSource().getClient());
             return 1;
         }));
+        root.then(ClientCommands.literal("engine")
+                .executes(context -> engineStatus(context.getSource().getClient()))
+                .then(ClientCommands.literal("status").executes(context -> engineStatus(context.getSource().getClient())))
+                .then(ClientCommands.literal("install").executes(context -> install(context.getSource().getClient())))
+                .then(ClientCommands.literal("cancel").executes(context -> {
+                    VoiceCaptionsManager.getInstance().cancelInstall();
+                    return engineStatus(context.getSource().getClient());
+                })));
         root.then(ClientCommands.literal("test")
                 .executes(context -> test(context.getSource(),
                         Component.translatable("voicecaptions.test.sample").getString()))
@@ -57,7 +66,7 @@ public final class VoiceCaptionsCommands {
             }
             Component body;
             if (result instanceof TranscriptionClient.Success success) {
-                body = Component.translatable("voicecaptions.check.ok", success.latencyMs())
+                body = Component.translatable("voicecaptions.check.ok", VoiceCaptionsManager.backendName(success), success.latencyMs())
                         .withStyle(ChatFormatting.GREEN);
             } else {
                 body = VoiceCaptionsManager.failureText((TranscriptionClient.Failure) result).copy()
@@ -65,6 +74,36 @@ public final class VoiceCaptionsCommands {
             }
             client.player.sendSystemMessage(prefix().append(body));
         }));
+    }
+
+    private static int engineStatus(Minecraft client) {
+        if (client.player != null) {
+            client.player.sendSystemMessage(prefix().append(Component.translatable("voicecaptions.engine.now",
+                    VoiceCaptionsManager.getInstance().engineSummary()).withStyle(ChatFormatting.GRAY)));
+        }
+        return 1;
+    }
+
+    private static int install(Minecraft client) {
+        VoiceCaptionsConfig config = VoiceCaptionsConfig.current();
+        EngineCatalog.Model model = EngineCatalog.Model.byId(config.gpuModel);
+        VoiceCaptionsManager manager = VoiceCaptionsManager.getInstance();
+        Component message;
+        if (!EngineCatalog.isSupportedPlatform()) {
+            message = Component.translatable("voicecaptions.error.unsupported").withStyle(ChatFormatting.RED);
+        } else if (manager.gpuInstalled(model)) {
+            message = Component.translatable("voicecaptions.engine.already_installed",
+                    Component.translatable(model.translationKey())).withStyle(ChatFormatting.GREEN);
+        } else if (manager.installEngine(model)) {
+            message = Component.translatable("voicecaptions.engine.install_started",
+                    Component.translatable(model.translationKey())).withStyle(ChatFormatting.GRAY);
+        } else {
+            message = Component.translatable("voicecaptions.engine.install_running").withStyle(ChatFormatting.GRAY);
+        }
+        if (client.player != null) {
+            client.player.sendSystemMessage(prefix().append(message));
+        }
+        return 1;
     }
 
     private static int test(FabricClientCommandSource source, String text) {

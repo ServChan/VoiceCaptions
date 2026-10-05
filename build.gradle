@@ -85,6 +85,13 @@ java {
 
 test {
     useJUnitPlatform()
+    ["voicecaptions.live", "voicecaptions.live.models", "voicecaptions.live.clips"].each { name ->
+        def value = System.getProperty(name)
+        if (value != null) {
+            systemProperty name, value
+            outputs.upToDateWhen { false }
+        }
+    }
 }
 
 jar {

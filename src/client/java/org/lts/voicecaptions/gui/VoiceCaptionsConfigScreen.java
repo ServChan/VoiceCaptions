@@ -1,6 +1,10 @@
 package org.lts.voicecaptions.gui;
 
+import com.mojang.blaze3d.Blaze3D;
 import com.mojang.blaze3d.platform.InputConstants;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.function.BiConsumer;
@@ -18,6 +22,8 @@ import net.minecraft.network.chat.Component;
 import org.lts.voicecaptions.VoiceCaptionsConfig;
 import org.lts.voicecaptions.VoiceCaptionsManager;
 import org.lts.voicecaptions.command.VoiceCaptionsCommands;
+import org.lts.voicecaptions.engine.EngineCatalog;
+import org.lts.voicecaptions.engine.EngineInstaller;
 import org.lts.voicecaptions.stt.TranscriptionClient;
 
 public final class VoiceCaptionsConfigScreen extends Screen {
@@ -45,6 +51,7 @@ public final class VoiceCaptionsConfigScreen extends Screen {
     private final List<Field> fields = new ArrayList<>();
     private int tab = lastTab;
     private Button saveButton;
+    private Button installButton;
     private String validationError = "";
     private Component status = Component.empty();
     private int statusColor = TEXT_DIM;
@@ -72,20 +79,42 @@ public final class VoiceCaptionsConfigScreen extends Screen {
 
         int y = ROW_START;
         if (tab == RECOGNITION_TAB) {
-            textField(left, y, contentWidth, 110, "voicecaptions.option.endpoint", draft.endpoint, 256,
-                    value -> !value.isBlank() && (value.startsWith("http://") || value.startsWith("https://")),
-                    (config, value) -> config.endpoint = value.strip(), "voicecaptions.error.endpoint");
+            addRenderableWidget(Button.builder(engineModeLabel(), button -> {
+                        draft.engineMode = draft.isAutoEngine()
+                                ? VoiceCaptionsConfig.ENGINE_CUSTOM : VoiceCaptionsConfig.ENGINE_AUTO;
+                        rebuild();
+                    }).tooltip(Tooltip.create(Component.translatable("voicecaptions.option.engine.tooltip")))
+                    .bounds(left, y, half, FIELD_HEIGHT).build());
+            if (draft.isAutoEngine()) {
+                addRenderableWidget(Button.builder(gpuModelLabel(), button -> {
+                            draft.gpuModel = EngineCatalog.Model.byId(draft.gpuModel).next().id();
+                            button.setMessage(gpuModelLabel());
+                            refreshInstallButton();
+                        }).tooltip(Tooltip.create(Component.translatable("voicecaptions.option.gpu_model.tooltip")))
+                        .bounds(right, y, half, FIELD_HEIGHT).build());
+                y += rowHeight;
+                installButton = addRenderableWidget(Button.builder(Component.empty(), button -> installOrCancel())
+                        .tooltip(Tooltip.create(Component.translatable("voicecaptions.button.install.tooltip")))
+                        .bounds(left, y, half, FIELD_HEIGHT).build());
+                refreshInstallButton();
+                addRenderableWidget(Button.builder(Component.translatable("voicecaptions.button.open_folder"),
+                                button -> openEngineFolder())
+                        .tooltip(Tooltip.create(Component.translatable("voicecaptions.button.open_folder.tooltip")))
+                        .bounds(right, y, half, FIELD_HEIGHT).build());
+            } else {
+                textField(right, y, half, 70, "voicecaptions.option.model", draft.model, 96,
+                        value -> true, (config, value) -> config.model = value.strip(), null);
+                y += rowHeight;
+                textField(left, y, contentWidth, 110, "voicecaptions.option.endpoint", draft.endpoint, 256,
+                        value -> !value.isBlank() && (value.startsWith("http://") || value.startsWith("https://")),
+                        (config, value) -> config.endpoint = value.strip(), "voicecaptions.error.endpoint");
+            }
             y += rowHeight;
-            textField(left, y, half, 70, "voicecaptions.option.model", draft.model, 96,
-                    value -> true, (config, value) -> config.model = value.strip(), null);
-            textField(right, y, half, 70, "voicecaptions.option.language", draft.language, 3,
+            textField(left, y, half, 70, "voicecaptions.option.language", draft.language, 3,
                     VoiceCaptionsConfig::isValidLanguage, (config, value) -> config.language = value.strip(),
                     "voicecaptions.error.language");
-            y += rowHeight;
-            intField(left, y, half, "voicecaptions.option.timeout", draft.requestTimeoutSeconds, 5, 120,
+            intField(right, y, half, "voicecaptions.option.timeout", draft.requestTimeoutSeconds, 5, 120,
                     (config, value) -> config.requestTimeoutSeconds = value);
-            intField(right, y, half, "voicecaptions.option.max_queue", draft.maxQueue, 1, 20,
-                    (config, value) -> config.maxQueue = value);
             y += rowHeight;
             intField(left, y, half, "voicecaptions.option.silence_gap", draft.silenceGapMs, 300, 2000,
                     (config, value) -> config.silenceGapMs = value);
@@ -96,6 +125,9 @@ public final class VoiceCaptionsConfigScreen extends Screen {
                     (config, value) -> config.enabled = value);
             toggle(right, y, half, "voicecaptions.option.only_audible", config -> config.onlyAudible,
                     (config, value) -> config.onlyAudible = value);
+            y += rowHeight;
+            intField(left, y, half, "voicecaptions.option.max_queue", draft.maxQueue, 1, 20,
+                    (config, value) -> config.maxQueue = value);
         } else {
             intField(left, y, half, "voicecaptions.option.max_width", draft.bubbleMaxWidth, 60, 400,
                     (config, value) -> config.bubbleMaxWidth = value);
@@ -207,11 +239,86 @@ public final class VoiceCaptionsConfigScreen extends Screen {
         if (target == tab) {
             return;
         }
-        commitValid();
         tab = target;
         lastTab = target;
+        rebuild();
+    }
+
+    private void rebuild() {
+        commitValid();
+        installButton = null;
         clearWidgets();
         init();
+    }
+
+    private Component engineModeLabel() {
+        return Component.translatable("voicecaptions.option.engine", Component.translatable(draft.isAutoEngine()
+                ? "voicecaptions.engine_mode.auto" : "voicecaptions.engine_mode.custom").withStyle(ChatFormatting.AQUA));
+    }
+
+    private Component gpuModelLabel() {
+        EngineCatalog.Model model = EngineCatalog.Model.byId(draft.gpuModel);
+        return Component.translatable("voicecaptions.option.gpu_model",
+                Component.translatable(model.translationKey()).withStyle(ChatFormatting.AQUA));
+    }
+
+    private void refreshInstallButton() {
+        if (installButton == null) {
+            return;
+        }
+        VoiceCaptionsManager manager = VoiceCaptionsManager.getInstance();
+        EngineInstaller.Progress progress = manager.installProgress();
+        EngineCatalog.Model model = EngineCatalog.Model.byId(draft.gpuModel);
+        if (!EngineCatalog.isSupportedPlatform()) {
+            installButton.setMessage(Component.translatable("voicecaptions.button.install.unsupported"));
+            installButton.active = false;
+        } else if (progress.running()) {
+            installButton.setMessage(Component.translatable("voicecaptions.button.install.cancel", progress.percent()));
+            installButton.active = true;
+        } else if (manager.gpuInstalled(model)) {
+            installButton.setMessage(Component.translatable("voicecaptions.button.install.done"));
+            installButton.active = false;
+        } else {
+            installButton.setMessage(Component.translatable("voicecaptions.button.install",
+                    EngineCatalog.megabytes(downloadSize(model))));
+            installButton.active = true;
+        }
+    }
+
+    private static long downloadSize(EngineCatalog.Model model) {
+        VoiceCaptionsManager manager = VoiceCaptionsManager.getInstance();
+        long size = EngineInstaller.modelInstalled(manager.engineFiles(), model) ? 0L : model.file().size();
+        if (!EngineInstaller.runtimeInstalled(manager.engineFiles())) {
+            size += EngineCatalog.RUNTIME.size();
+        }
+        return size;
+    }
+
+    private void installOrCancel() {
+        VoiceCaptionsManager manager = VoiceCaptionsManager.getInstance();
+        if (manager.installProgress().running()) {
+            manager.cancelInstall();
+        } else if (commitAndSave()) {
+            manager.installEngine(EngineCatalog.Model.byId(draft.gpuModel));
+        }
+        refreshInstallButton();
+    }
+
+    private void openEngineFolder() {
+        Path folder = VoiceCaptionsManager.getInstance().engineFiles().root();
+        try {
+            Files.createDirectories(folder);
+            Blaze3D.openPath(folder);
+        } catch (IOException | RuntimeException exception) {
+            status = Component.literal(folder.toString());
+            statusColor = TEXT_DIM;
+        }
+    }
+
+    @Override
+    public void tick() {
+        super.tick();
+        refreshInstallButton();
     }
 
     private void commitValid() {
@@ -273,7 +380,7 @@ public final class VoiceCaptionsConfigScreen extends Screen {
             }
             this.minecraft.execute(() -> {
                 if (result instanceof TranscriptionClient.Success success) {
-                    status = Component.translatable("voicecaptions.check.ok", success.latencyMs());
+                    status = Component.translatable("voicecaptions.check.ok", VoiceCaptionsManager.backendName(success), success.latencyMs());
                     statusColor = STATUS_ON;
                 } else {
                     status = VoiceCaptionsManager.failureText((TranscriptionClient.Failure) result);
@@ -313,8 +420,8 @@ public final class VoiceCaptionsConfigScreen extends Screen {
         } else if (!status.getString().isEmpty()) {
             graphics.centeredText(this.font, status, this.width / 2, messageY, statusColor);
         } else if (tab == RECOGNITION_TAB) {
-            graphics.centeredText(this.font, Component.translatable("voicecaptions.screen.hint"), this.width / 2,
-                    messageY, TEXT_DIM);
+            graphics.centeredText(this.font, Component.translatable("voicecaptions.engine.now",
+                    VoiceCaptionsManager.getInstance().engineSummary()), this.width / 2, messageY, TEXT_DIM);
         }
         super.extractRenderState(graphics, mouseX, mouseY, tickDelta);
     }
