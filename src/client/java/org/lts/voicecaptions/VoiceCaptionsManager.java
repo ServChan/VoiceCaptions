@@ -11,7 +11,10 @@ import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.player.AbstractClientPlayer;
+import net.minecraft.network.chat.ClickEvent;
 import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.HoverEvent;
+import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.world.level.ClipContext;
 import net.minecraft.world.phys.HitResult;
 import net.minecraft.world.phys.Vec3;
@@ -57,6 +60,8 @@ public final class VoiceCaptionsManager {
     private volatile Set<UUID> speaking = Set.of();
     private volatile Set<UUID> occluded = Set.of();
     private volatile TranscriptionClient.Failure lastFailure;
+    private volatile TranscriptionClient.Failure problem;
+    private EngineInstaller.Phase seenInstallPhase = EngineInstaller.Phase.IDLE;
     private volatile long lastLatencyMs = -1L;
     private volatile EngineRouter.Backend lastBackend;
     private volatile boolean voiceConnected;
@@ -108,7 +113,8 @@ public final class VoiceCaptionsManager {
             return;
         }
         if (!hadLevel && config.enabled) {
-            client.warmUp();
+            lastNoticeAtMs = 0L;
+            warmUp();
         }
         hadLevel = true;
         if (!config.enabled) {
@@ -120,7 +126,57 @@ public final class VoiceCaptionsManager {
         }
         speaking = Set.copyOf(assembler.speaking(now));
         occluded = config.showThroughWalls ? Set.of() : computeOccluded(minecraft, config);
+        announceInstall(minecraft);
         announceFailure(minecraft, now);
+    }
+
+    public Component problemHint() {
+        TranscriptionClient.Failure current = problem;
+        return current == null ? null : Component.translatable("voicecaptions.bubble.not_recognized");
+    }
+
+    private void warmUp() {
+        client.warmUp(result -> {
+            if (result instanceof TranscriptionClient.Success success) {
+                lastBackend = success.backend();
+                problem = null;
+            } else if (result instanceof TranscriptionClient.Failure failure) {
+                recordFailure(failure);
+            }
+        });
+    }
+
+    private void recordFailure(TranscriptionClient.Failure failure) {
+        if (failure.kind() == TranscriptionClient.FailureKind.DROPPED) {
+            return;
+        }
+        lastFailure = failure;
+        if (failure.kind() != TranscriptionClient.FailureKind.TIMEOUT
+                && failure.kind() != TranscriptionClient.FailureKind.BAD_RESPONSE) {
+            problem = failure;
+        }
+    }
+
+    private void announceInstall(Minecraft minecraft) {
+        EngineInstaller.Progress progress = router.installProgress();
+        if (progress.phase() == seenInstallPhase) {
+            return;
+        }
+        seenInstallPhase = progress.phase();
+        if (minecraft.player == null) {
+            return;
+        }
+        Component body = switch (progress.phase()) {
+            case DONE -> Component.translatable("voicecaptions.engine.install_done").withStyle(ChatFormatting.GREEN);
+            case FAILED -> Component.translatable("voicecaptions.engine.install_failed", progress.error())
+                    .withStyle(ChatFormatting.RED);
+            case CANCELLED -> Component.translatable("voicecaptions.engine.install_cancelled").withStyle(ChatFormatting.GRAY);
+            default -> null;
+        };
+        if (body != null) {
+            minecraft.player.sendSystemMessage(Component.translatable("voicecaptions.notice.prefix")
+                    .withStyle(ChatFormatting.AQUA).append(Component.literal(" ")).append(body));
+        }
     }
 
     public List<CaptionBoard.SpeakerView> views(long nowMs) {
@@ -155,13 +211,18 @@ public final class VoiceCaptionsManager {
                 lastLatencyMs = success.latencyMs();
                 lastBackend = success.backend();
                 lastFailure = null;
+                problem = null;
             }
             callback.accept(result);
         });
     }
 
     public boolean installEngine(EngineCatalog.Model model) {
-        return router.install(model, client::warmUp);
+        return router.install(model, () -> {
+            problem = null;
+            lastFailure = null;
+            warmUp();
+        });
     }
 
     public void cancelInstall() {
@@ -239,13 +300,13 @@ public final class VoiceCaptionsManager {
                 lastLatencyMs = success.latencyMs();
                 lastBackend = success.backend();
                 lastFailure = null;
+                problem = null;
                 String text = TranscriptCleaner.clean(success.text());
                 if (!text.isEmpty()) {
                     board.add(speaker, name, text, System.currentTimeMillis());
                 }
-            } else if (result instanceof TranscriptionClient.Failure failure
-                    && failure.kind() != TranscriptionClient.FailureKind.DROPPED) {
-                lastFailure = failure;
+            } else if (result instanceof TranscriptionClient.Failure failure) {
+                recordFailure(failure);
             }
         });
     }
@@ -253,11 +314,20 @@ public final class VoiceCaptionsManager {
     private void apply(VoiceCaptionsConfig config) {
         VoiceCaptionsConfig previous = appliedConfig;
         appliedConfig = config;
-        if (previous != null && (!config.enabled || !config.isAutoEngine()
-                || !config.gpuModel.equals(previous.gpuModel))) {
+        boolean engineChanged = previous != null && (previous.enabled != config.enabled
+                || !previous.engineMode.equals(config.engineMode) || !previous.gpuModel.equals(config.gpuModel)
+                || !previous.endpoint.equals(config.endpoint) || !previous.model.equals(config.model));
+        if (engineChanged && (!config.enabled || !config.isAutoEngine())) {
             Thread stopper = new Thread(router::stopEngine, "VoiceCaptions engine stop");
             stopper.setDaemon(true);
             stopper.start();
+        }
+        if (engineChanged) {
+            problem = null;
+            lastFailure = null;
+            if (config.enabled && hadLevel) {
+                warmUp();
+            }
         }
         int soft = config.maxPhraseSeconds * 1000;
         assembler.configure(new UtteranceAssembler.Settings(config.silenceGapMs, soft, soft + 5000, 350, 140.0));
@@ -323,10 +393,24 @@ public final class VoiceCaptionsManager {
         }
         lastNoticeAtMs = now;
         lastFailure = null;
-        Component message = Component.translatable("voicecaptions.notice.prefix").withStyle(ChatFormatting.AQUA)
+        MutableComponent message = Component.translatable("voicecaptions.notice.prefix").withStyle(ChatFormatting.AQUA)
                 .append(Component.literal(" "))
                 .append(failureText(failure).copy().withStyle(ChatFormatting.GRAY));
+        if (failure.kind() == TranscriptionClient.FailureKind.NOT_INSTALLED && !router.installProgress().running()) {
+            message.append(Component.literal(" ")).append(link("voicecaptions.link.install",
+                    "voicecaptions.link.install.hover", "/voicecaptions engine install"));
+        }
+        message.append(Component.literal(" ")).append(link("voicecaptions.link.settings",
+                "voicecaptions.link.settings.hover", "/voicecaptions"));
         minecraft.player.sendSystemMessage(message);
+    }
+
+    private static Component link(String labelKey, String hoverKey, String command) {
+        return Component.translatable(labelKey).withStyle(style -> style
+                .withColor(ChatFormatting.AQUA)
+                .withUnderlined(true)
+                .withClickEvent(new ClickEvent.RunCommand(command))
+                .withHoverEvent(new HoverEvent.ShowText(Component.translatable(hoverKey))));
     }
 
     public static Component backendName(TranscriptionClient.Success success) {

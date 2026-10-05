@@ -3,7 +3,7 @@
 [![Minecraft Version](https://img.shields.io/badge/Minecraft-26.3-brightgreen?style=flat-square&logo=minecraft)](README.md)
 [![Platform](https://img.shields.io/badge/Platform-Fabric-blue?style=flat-square&logo=fabric)](README.md)
 [![Java Target](https://img.shields.io/badge/Java-25-orange?style=flat-square&logo=openjdk)](README.md)
-[![Mod Version](https://img.shields.io/badge/Version-1.1.0-purple?style=flat-square)](README.md)
+[![Mod Version](https://img.shields.io/badge/Version-1.1.1-purple?style=flat-square)](README.md)
 [![License](https://img.shields.io/badge/License-MIT-yellow?style=flat-square)](LICENSE)
 [![Requires](https://img.shields.io/badge/Requires-Plasmo%20Voice%202.1.17%2B-red?style=flat-square)](https://modrinth.com/mod/plasmo-voice)
 
@@ -57,7 +57,7 @@ Recognition picks the engine on its own: the Ryzen AI NPU when its server runs, 
 ### Установка
 
 1. **Fabric Loader** `0.19.3+`, **Fabric API** `0.161.0+26.3` и **Plasmo Voice** `2.1.17+` для 26.3.
-2. Добавьте `voice-captions-1.1.0.jar` из `build/libs/` в папку `mods/`.
+2. Добавьте `voice-captions-1.1.1.jar` из `build/libs/` в папку `mods/`.
 3. Выберите, чем распознавать.
 
 **Видеокарта (любой ПК с Windows x64):** откройте `/voicecaptions` → «Распознавание» → «Скачать для видеокарты». Мод скачает whisper.cpp 1.8.4 с Vulkan (21 МБ, github.com/lemonade-sdk) и модель (huggingface.co/ggerganov) в папку `voicecaptions/` игры, проверит SHA-256 и дальше будет запускать движок сам. Системный прокси Windows и переменные `HTTPS_PROXY`/`HTTP_PROXY` учитываются. Замер на RTX 5080:
@@ -93,7 +93,7 @@ flm serve --asr 1
 .\gradlew.bat clean build
 ```
 
-Готовый JAR: `build/libs/voice-captions-1.1.0.jar`.
+Готовый JAR: `build/libs/voice-captions-1.1.1.jar`.
 
 Живая проверка движка на этом ПК (скачивает файлы в указанную папку, нужны `ru.wav`, `short.wav`, `en.wav` 16 кГц моно):
 
@@ -144,7 +144,7 @@ Two tabs: **Recognition** (engine "Auto" or "Own server", GPU model, "Download f
 ### Installation
 
 1. **Fabric Loader** `0.19.3+`, **Fabric API** `0.161.0+26.3` and **Plasmo Voice** `2.1.17+` for 26.3.
-2. Add `voice-captions-1.1.0.jar` from `build/libs/` to the `mods/` folder.
+2. Add `voice-captions-1.1.1.jar` from `build/libs/` to the `mods/` folder.
 3. Choose what recognizes speech.
 
 **Graphics card (any Windows x64 PC):** open `/voicecaptions` → Recognition → "Download for GPU". The mod downloads whisper.cpp 1.8.4 with Vulkan (21 MB, github.com/lemonade-sdk) and the model (huggingface.co/ggerganov) into the game's `voicecaptions/` folder, checks SHA-256 and starts the engine itself. The Windows system proxy and `HTTPS_PROXY`/`HTTP_PROXY` are honoured. Measured on an RTX 5080: Turbo (default, 547 MB, ≈0.9 GB VRAM) answers a 3–7 s phrase in 60–120 ms with no mistakes on the Russian test phrases; Base (57 MB) takes 30–55 ms but makes mistakes. The first phrase after the engine starts takes 5–8 s while Vulkan builds shaders, so the mod sends it itself when you join a world.
@@ -161,7 +161,7 @@ Two tabs: **Recognition** (engine "Auto" or "Own server", GPU model, "Download f
 .\gradlew.bat clean build
 ```
 
-Output JAR: `build/libs/voice-captions-1.1.0.jar`.
+Output JAR: `build/libs/voice-captions-1.1.1.jar`.
 
 ## Лицензия / License
 

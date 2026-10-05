@@ -108,5 +108,12 @@
   "voicecaptions.backend.custom": "свой сервер",
   "voicecaptions.error.not_installed": "NPU-сервер не найден, а движок для видеокарты ещё не скачан. Откройте /voicecaptions → «Распознавание» → «Скачать для видеокарты» (около %s МБ).",
   "voicecaptions.error.unsupported": "NPU-сервер не найден, а встроенный движок для видеокарты работает только на Windows x64. Переключите движок на «Свой сервер».",
-  "voicecaptions.error.engine_failed": "Движок видеокарты не запустился: %s. Подробности в voicecaptions/engine.log."
+  "voicecaptions.error.engine_failed": "Движок видеокарты не запустился: %s. Подробности в voicecaptions/engine.log.",
+  "voicecaptions.bubble.not_recognized": "речь не распознаётся — /voicecaptions",
+  "voicecaptions.link.install": "[Скачать для видеокарты]",
+  "voicecaptions.link.install.hover": "Скачает whisper.cpp (Vulkan) и выбранную модель в папку voicecaptions игры и запустит распознавание.",
+  "voicecaptions.link.settings": "[Настройки]",
+  "voicecaptions.link.settings.hover": "Открыть настройки субтитров голоса",
+  "voicecaptions.engine.install_done": "Движок для видеокарты скачан. Распознавание заработает через несколько секунд.",
+  "voicecaptions.engine.install_cancelled": "Загрузка отменена."
 }

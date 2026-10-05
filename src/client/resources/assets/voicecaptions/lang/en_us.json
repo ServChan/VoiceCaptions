@@ -108,5 +108,12 @@
   "voicecaptions.backend.custom": "own server",
   "voicecaptions.error.not_installed": "No NPU server found, and the GPU engine is not downloaded yet. Open /voicecaptions → Recognition → «Download for GPU» (about %s MB).",
   "voicecaptions.error.unsupported": "No NPU server found, and the built-in GPU engine works only on Windows x64. Switch the engine to «Own server».",
-  "voicecaptions.error.engine_failed": "GPU engine did not start: %s. Details are in voicecaptions/engine.log."
+  "voicecaptions.error.engine_failed": "GPU engine did not start: %s. Details are in voicecaptions/engine.log.",
+  "voicecaptions.bubble.not_recognized": "speech is not recognized — /voicecaptions",
+  "voicecaptions.link.install": "[Download for GPU]",
+  "voicecaptions.link.install.hover": "Downloads whisper.cpp (Vulkan) and the selected model into the game's voicecaptions folder, then starts recognition.",
+  "voicecaptions.link.settings": "[Settings]",
+  "voicecaptions.link.settings.hover": "Open Voice Captions settings",
+  "voicecaptions.engine.install_done": "GPU engine downloaded. Recognition starts in a few seconds.",
+  "voicecaptions.engine.install_cancelled": "Download cancelled."
 }

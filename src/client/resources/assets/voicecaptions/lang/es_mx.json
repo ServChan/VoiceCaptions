@@ -108,5 +108,12 @@
   "voicecaptions.backend.custom": "servidor propio",
   "voicecaptions.error.not_installed": "No se encontró servidor NPU y el motor GPU aún no está descargado. Abre /voicecaptions → Reconocimiento → «Descargar para GPU» (unos %s MB).",
   "voicecaptions.error.unsupported": "No se encontró servidor NPU y el motor GPU integrado solo funciona en Windows x64. Cambia el motor a «Servidor propio».",
-  "voicecaptions.error.engine_failed": "El motor GPU no arrancó: %s. Detalles en voicecaptions/engine.log."
+  "voicecaptions.error.engine_failed": "El motor GPU no arrancó: %s. Detalles en voicecaptions/engine.log.",
+  "voicecaptions.bubble.not_recognized": "la voz no se reconoce — /voicecaptions",
+  "voicecaptions.link.install": "[Descargar para GPU]",
+  "voicecaptions.link.install.hover": "Descarga whisper.cpp (Vulkan) y el modelo elegido en la carpeta voicecaptions del juego e inicia el reconocimiento.",
+  "voicecaptions.link.settings": "[Ajustes]",
+  "voicecaptions.link.settings.hover": "Abrir los ajustes de subtítulos de voz",
+  "voicecaptions.engine.install_done": "Motor GPU descargado. El reconocimiento empieza en unos segundos.",
+  "voicecaptions.engine.install_cancelled": "Descarga cancelada."
 }

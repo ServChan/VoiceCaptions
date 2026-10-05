@@ -12,6 +12,7 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.player.AbstractClientPlayer;
+import net.minecraft.network.chat.Component;
 import net.minecraft.world.phys.Vec3;
 import org.joml.Matrix4f;
 import org.joml.Vector4f;
@@ -35,11 +36,12 @@ public final class CaptionRenderer {
     private static final int OLDER_TEXT_RGB = 0xAFC0D2;
     private static final int NAME_RGB = 0x7FD9FF;
     private static final int DOT_RGB = 0xC8D6E5;
+    private static final int PROBLEM_RGB = 0xE8B86A;
     private static final String DOT = "•";
     private static final float MIN_ALPHA = 0.08F;
 
     private record Bubble(CaptionBoard.SpeakerView view, CaptionLayout.Block block, int newestLines,
-                          String name, boolean dots, int width, int height, float scale,
+                          String name, boolean dots, String problem, int width, int height, float scale,
                           BubblePlacer.Box box) {
     }
 
@@ -74,6 +76,7 @@ public final class CaptionRenderer {
         int screenHeight = graphics.guiHeight();
         Font font = minecraft.font;
         int lineHeight = font.lineHeight + 1;
+        Component problemHint = manager.problemHint();
 
         List<Bubble> bubbles = new ArrayList<>();
         for (CaptionBoard.SpeakerView view : views) {
@@ -117,8 +120,11 @@ public final class CaptionRenderer {
                 newestLines = Math.min(block.lines().size(),
                         CaptionLayout.wrap(newest, config.bubbleMaxWidth, font::width).size());
             }
-            boolean dots = config.showSpeakingIndicator && (view.speaking() || view.transcribing());
-            if (block.isEmpty() && !dots) {
+            boolean active = view.speaking() || view.transcribing();
+            String problem = problemHint != null && active
+                    ? fit(font, problemHint.getString(), config.bubbleMaxWidth) : "";
+            boolean dots = problem.isEmpty() && config.showSpeakingIndicator && active;
+            if (block.isEmpty() && !dots && problem.isEmpty()) {
                 continue;
             }
             String name = config.showName && !block.isEmpty() ? displayName(view, player) : "";
@@ -129,15 +135,18 @@ public final class CaptionRenderer {
             if (dots) {
                 contentWidth = Math.max(contentWidth, font.width(DOT) + DOT_SPACING * 2);
             }
+            if (!problem.isEmpty()) {
+                contentWidth = Math.max(contentWidth, font.width(problem));
+            }
             int width = Math.max(MIN_WIDTH, contentWidth + PAD_X * 2);
-            int rows = block.lines().size() + (name.isEmpty() ? 0 : 1) + (dots ? 1 : 0);
+            int rows = block.lines().size() + (name.isEmpty() ? 0 : 1) + (dots || !problem.isEmpty() ? 1 : 0);
             int height = PAD_Y * 2 + rows * lineHeight - 1;
 
             double t = Math.max(0.0, Math.min(1.0, (distance - NEAR_DISTANCE) / Math.max(1.0, config.maxDistance - NEAR_DISTANCE)));
             float scale = (float) (config.textScale * (1.0 - t * (1.0 - config.farScale)));
             BubblePlacer.Box box = new BubblePlacer.Box(view.speaker(), distance, anchorX, anchorY - TAIL * scale,
                     width * scale, height * scale);
-            bubbles.add(new Bubble(view, block, newestLines, name, dots, width, height, scale, box));
+            bubbles.add(new Bubble(view, block, newestLines, name, dots, problem, width, height, scale, box));
         }
         if (bubbles.isEmpty()) {
             return;
@@ -194,6 +203,9 @@ public final class CaptionRenderer {
             graphics.text(font, lines.get(i), PAD_X, y, argb(alpha, rgb), false);
             y += lineHeight;
         }
+        if (!bubble.problem().isEmpty()) {
+            graphics.text(font, bubble.problem(), PAD_X, y, argb(alpha, PROBLEM_RGB), false);
+        }
         if (bubble.dots()) {
             int phase = (int) ((System.currentTimeMillis() / 300L) % 3L);
             int dotsWidth = font.width(DOT) + DOT_SPACING * 2;
@@ -204,6 +216,13 @@ public final class CaptionRenderer {
             }
         }
         graphics.pose().popMatrix();
+    }
+
+    private static String fit(Font font, String text, int maxWidth) {
+        if (font.width(text) <= maxWidth) {
+            return text;
+        }
+        return font.plainSubstrByWidth(text, maxWidth - font.width(CaptionLayout.ELLIPSIS)) + CaptionLayout.ELLIPSIS;
     }
 
     private static String displayName(CaptionBoard.SpeakerView view, AbstractClientPlayer player) {

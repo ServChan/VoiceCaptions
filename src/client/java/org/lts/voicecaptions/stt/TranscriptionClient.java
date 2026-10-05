@@ -100,9 +100,8 @@ public final class TranscriptionClient {
         queue.offerFirst(new Job(new short[Resampler.TARGET_RATE], request, callback));
     }
 
-    public void warmUp() {
-        queue.offerFirst(new Job(new short[Resampler.TARGET_RATE], new Request("", 60), ignored -> {
-        }));
+    public void warmUp(Consumer<Result> callback) {
+        queue.offerFirst(new Job(new short[Resampler.TARGET_RATE], new Request("", 60), callback));
     }
 
     public void shutdown() {
