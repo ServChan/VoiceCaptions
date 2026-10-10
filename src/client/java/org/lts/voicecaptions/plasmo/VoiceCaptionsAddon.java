@@ -41,7 +41,7 @@ public final class VoiceCaptionsAddon implements AddonInitializer {
     public void onAddonInitialize() {
         voiceClient.getEventBus().register(this, AudioSourceWriteEvent.class, EventPriority.LOWEST, this::onWrite);
         voiceClient.getEventBus().register(this, AudioSourceResetEvent.class, EventPriority.LOWEST, this::onReset);
-        VoiceCaptionsClient.LOGGER.info("Plasmo Voice addon registered");
+        VoiceCaptionsClient.LOGGER.info("Registered the Plasmo Voice addon");
     }
 
     private void onWrite(AudioSourceWriteEvent event) {

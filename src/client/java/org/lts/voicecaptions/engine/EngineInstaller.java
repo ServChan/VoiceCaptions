@@ -23,11 +23,10 @@ import java.util.List;
 import java.util.stream.Stream;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import org.lts.voicecaptions.ModLog;
 
 public final class EngineInstaller {
-    private static final Logger LOGGER = LoggerFactory.getLogger("voicecaptions");
+    private static final ModLog LOGGER = ModLog.of("Engine");
     private static final String MARKER = ".installed";
     private static final int BUFFER = 64 * 1024;
 
@@ -124,7 +123,7 @@ public final class EngineInstaller {
         } catch (CancelledException exception) {
             progress = new Progress(Phase.CANCELLED, 0, 0, "");
         } catch (IOException | RuntimeException exception) {
-            LOGGER.warn("Engine install failed", exception);
+            LOGGER.warn("Could not install the speech engine", exception);
             String message = exception.getMessage() == null ? exception.getClass().getSimpleName() : exception.getMessage();
             progress = new Progress(Phase.FAILED, 0, 0, message);
         }

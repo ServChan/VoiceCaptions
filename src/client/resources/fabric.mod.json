@@ -6,6 +6,7 @@
   "description": "Speech-to-text captions above players' heads for Plasmo Voice, recognized by a local Whisper server (NPU, GPU or CPU).",
   "authors": ["LTS_Server"],
   "license": "MIT",
+  "icon": "assets/voicecaptions/icon.png",
   "environment": "client",
   "entrypoints": {
     "client": ["org.lts.voicecaptions.VoiceCaptionsClient"],

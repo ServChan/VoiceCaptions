@@ -17,12 +17,10 @@ import net.minecraft.resources.Identifier;
 import org.lts.voicecaptions.command.VoiceCaptionsCommands;
 import org.lts.voicecaptions.plasmo.VoiceCaptionsAddon;
 import org.lts.voicecaptions.render.CaptionRenderer;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 public final class VoiceCaptionsClient implements ClientModInitializer {
     public static final String MOD_ID = "voicecaptions";
-    public static final Logger LOGGER = LoggerFactory.getLogger(MOD_ID);
+    public static final ModLog LOGGER = ModLog.root();
     private static final KeyMapping.Category CATEGORY =
             KeyMapping.Category.register(Identifier.fromNamespaceAndPath(MOD_ID, "main"));
 
@@ -46,7 +44,7 @@ public final class VoiceCaptionsClient implements ClientModInitializer {
         } else {
             LOGGER.warn("Plasmo Voice is not loaded; captions stay idle");
         }
-        LOGGER.info("Voice Captions initialized");
+        LOGGER.ready();
     }
 
     private static void tick(Minecraft minecraft) {

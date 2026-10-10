@@ -10,11 +10,10 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import org.lts.voicecaptions.ModLog;
 
 public final class LocalEngine {
-    private static final Logger LOGGER = LoggerFactory.getLogger("voicecaptions");
+    private static final ModLog LOGGER = ModLog.of("Engine");
     private static final String HOST = "127.0.0.1";
     private static final long START_TIMEOUT_MS = 120_000L;
     private static final long RETRY_AFTER_FAILURE_MS = 30_000L;
@@ -41,6 +40,7 @@ public final class LocalEngine {
     private int port;
     private long failedAtMs;
     private String lastError = "";
+    private String reportedError;
 
     public Status status() {
         Process current = process;
@@ -171,7 +171,12 @@ public final class LocalEngine {
         lastError = message == null ? "" : message;
         failedAtMs = System.currentTimeMillis();
         status = new Status(State.FAILED, lastError);
-        LOGGER.warn("whisper-server failed: {}", lastError);
+        if (lastError.equals(reportedError)) {
+            LOGGER.debug("Could not run whisper-server: {}", lastError);
+        } else {
+            reportedError = lastError;
+            LOGGER.warn("Could not run whisper-server: {}; next try in {} s", lastError, RETRY_AFTER_FAILURE_MS / 1000L);
+        }
     }
 
     private static int freePort() throws StartException {
@@ -195,7 +200,7 @@ public final class LocalEngine {
         try {
             Files.writeString(files.root().resolve("engine.pid"), Long.toString(pid), StandardCharsets.UTF_8);
         } catch (IOException exception) {
-            LOGGER.debug("Could not write engine pid", exception);
+            LOGGER.debug("Could not write the engine pid file", exception);
         }
     }
 
@@ -217,7 +222,7 @@ public final class LocalEngine {
                     });
             Files.deleteIfExists(pidFile);
         } catch (IOException | NumberFormatException exception) {
-            LOGGER.debug("Could not check leftover engine", exception);
+            LOGGER.debug("Could not check for a leftover engine process", exception);
         }
     }
 

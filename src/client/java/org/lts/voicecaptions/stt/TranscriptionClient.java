@@ -12,17 +12,18 @@ import java.net.http.HttpResponse;
 import java.net.http.HttpTimeoutException;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.util.HashSet;
+import java.util.Set;
 import java.util.concurrent.LinkedBlockingDeque;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import org.lts.voicecaptions.ModLog;
 import org.lts.voicecaptions.audio.Resampler;
 import org.lts.voicecaptions.audio.WavEncoder;
 import org.lts.voicecaptions.engine.EngineRouter;
 
 public final class TranscriptionClient {
-    private static final Logger LOGGER = LoggerFactory.getLogger("voicecaptions");
+    private static final ModLog LOGGER = ModLog.of("Transcription");
     private static final long UNAVAILABLE_BACKOFF_MS = 10_000L;
 
     public record Request(String language, int timeoutSeconds) {
@@ -69,6 +70,7 @@ public final class TranscriptionClient {
     private volatile long unavailableUntilMs;
     private volatile boolean running = true;
     private EngineRouter.Backend lastAttemptBackend;
+    private final Set<String> reported = new HashSet<>();
 
     public TranscriptionClient(Router router) {
         this.router = router;
@@ -125,15 +127,24 @@ public final class TranscriptionClient {
             try {
                 result = execute(job);
             } catch (RuntimeException exception) {
-                LOGGER.warn("Transcription failed", exception);
+                if (firstReport("transcribe", exception)) {
+                    LOGGER.warn("Could not transcribe a phrase; repeats of this error are not logged", exception);
+                }
                 result = new Failure(FailureKind.BAD_RESPONSE, exception.getClass().getSimpleName());
             }
             try {
                 job.callback().accept(result);
             } catch (RuntimeException exception) {
-                LOGGER.warn("Transcription callback failed", exception);
+                if (firstReport("callback", exception)) {
+                    LOGGER.warn("Could not deliver a transcription result; repeats of this error are not logged", exception);
+                }
             }
         }
+    }
+
+    private boolean firstReport(String scope, RuntimeException exception) {
+        StackTraceElement[] trace = exception.getStackTrace();
+        return reported.add(scope + " " + exception.getClass().getName() + " " + (trace.length > 0 ? trace[0] : ""));
     }
 
     private Result execute(Job job) {
