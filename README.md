@@ -11,6 +11,8 @@ Speech-to-text captions above players' heads for Plasmo Voice, recognized by a l
 
 Recognition picks the engine on its own: the Ryzen AI NPU when its server runs, otherwise Whisper on this PC's graphics card, downloaded and started by the mod.
 
+**Руководство / User guide:** [Русский](docs/USER_GUIDE_RU.md) · [English](docs/USER_GUIDE_EN.md)
+
 ## Русский
 
 ### Что это
@@ -44,7 +46,7 @@ Recognition picks the engine on its own: the Ryzen AI NPU when its server runs, 
 
 | Действие | Клавиша / команда |
 |---|---|
-| Включить / выключить субтитры | не назначена; Options → Controls → Voice Captions, или `/voicecaptions toggle` |
+| Включить / выключить субтитры | не назначена; Настройки → Управление → Voice Captions, или `/voicecaptions toggle` |
 | Открыть настройки | `/voicecaptions` или Mod Menu |
 | Проверить распознавание | `/voicecaptions check` или кнопка «Проверить сервер» (пишет, какой движок ответил и за сколько) |
 | Состояние движка / скачать для видеокарты | `/voicecaptions engine`, `/voicecaptions engine install`, `/voicecaptions engine cancel` |
